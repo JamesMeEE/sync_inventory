@@ -1,6 +1,7 @@
 <?php
 
-error_reporting(E_ERROR | E_PARSE); // ปิด Deprecated warnings
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
+error_reporting(E_ERROR | E_PARSE);
 
 require __DIR__ . '/vendor/autoload.php';
 
