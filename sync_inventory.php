@@ -1,5 +1,7 @@
 <?php
 
+error_reporting(E_ERROR | E_PARSE); // ปิด Deprecated warnings
+
 require __DIR__ . '/vendor/autoload.php';
 
 // CONFIGURATION
