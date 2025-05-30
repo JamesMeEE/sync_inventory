@@ -72,7 +72,12 @@ function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 
-    $result = curl_exec($ch);
+    $result = @file_put_contents($jsonPath, json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    if ($result === false) {
+        logMessage("❌ Failed to write JSON. Path: $jsonPath");
+    } else {
+        logMessage("✅ JSON written: $result bytes");
+    }
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
     if (curl_errno($ch)) {
@@ -155,6 +160,9 @@ try {
 } catch (Exception $e) {
     logMessage("❌ Script error: " . $e->getMessage());
 }
+
+logMessage("📂 JSON Path = $jsonPath");
+logMessage("📌 Writable = " . (is_writable(dirname($jsonPath)) ? "YES" : "NO"));
 
 // 🔹 เขียน log ลงไฟล์
 file_put_contents($logFile, implode("\n", $logLines));
