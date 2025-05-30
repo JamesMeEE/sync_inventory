@@ -166,6 +166,7 @@ if (!is_dir($publicDir)) mkdir($publicDir, 0755, true);
 
 $jsonPath = $publicDir . '/latest.json';
 $jsonArray = [];
+$jsonArray[] = ['generated_at' => date('Y-m-d H:i:s')];
 $index = 1;
 foreach ($inventoryMap as $sku => $qty) {
     $jsonArray[] = [
