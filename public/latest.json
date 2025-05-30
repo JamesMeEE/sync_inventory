@@ -1,1 +1,52 @@
-
+[
+    {
+        "no": 1,
+        "sku": "BBWHI4",
+        "qty": 15
+    },
+    {
+        "no": 2,
+        "sku": "BBWHI5",
+        "qty": 1
+    },
+    {
+        "no": 3,
+        "sku": "X1RXSBSBLA2",
+        "qty": 88
+    },
+    {
+        "no": 4,
+        "sku": "BSBLA1",
+        "qty": 350
+    },
+    {
+        "no": 5,
+        "sku": "BSWHI1",
+        "qty": 19
+    },
+    {
+        "no": 6,
+        "sku": "BSPUR1",
+        "qty": 58
+    },
+    {
+        "no": 7,
+        "sku": "BSORA1",
+        "qty": 45
+    },
+    {
+        "no": 8,
+        "sku": "BSYEL1",
+        "qty": 70
+    },
+    {
+        "no": 9,
+        "sku": "BSGRE1",
+        "qty": 137
+    },
+    {
+        "no": 10,
+        "sku": "BSBLU1",
+        "qty": 181
+    }
+]
