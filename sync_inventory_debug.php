@@ -90,10 +90,9 @@ function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
 $totalUpdated = 0;
 $totalSkipped = 0;
 $totalFailed = 0;
-$totalItems = 0;
 $totalBundleUpdated = 0;
 $inventoryMap = [];
-$limit = 10; // ✅ จำกัด 10 SKU แรก
+$limit = 10;
 $countProcessed = 0;
 
 try {
@@ -161,25 +160,24 @@ try {
 file_put_contents($logFile, implode("\n", $logLines));
 file_put_contents($latestLogFile, implode("\n", $logLines));
 
-// ✅ เขียน JSON ไปยัง public/latest.json
+// ✅ เขียน JSON แบบเรียบง่ายลง public/latest.json
 $publicDir = __DIR__ . '/public';
 if (!is_dir($publicDir)) mkdir($publicDir, 0755, true);
 
 $jsonPath = $publicDir . '/latest.json';
-$jsonData = [
-    'timestamp' => date('c'),
-    'total_items_processed' => $countProcessed,
-    'total_updated' => $totalUpdated,
-    'total_skipped' => $totalSkipped,
-    'total_failed' => $totalFailed,
-    'bundle_updated' => $totalBundleUpdated,
-    'inventory' => $inventoryMap
-];
+$jsonArray = [];
+$index = 1;
+foreach ($inventoryMap as $sku => $qty) {
+    $jsonArray[] = [
+        'no' => $index++,
+        'sku' => $sku,
+        'qty' => $qty
+    ];
+}
 
-// ✅ แสดงข้อมูล JSON ที่จะบันทึก
-logMessage("📤 JSON content:\n" . json_encode($jsonData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+logMessage("📤 JSON content:\n" . json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-if (file_put_contents($jsonPath, json_encode($jsonData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false) {
+if (file_put_contents($jsonPath, json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false) {
     logMessage("✅ JSON saved to $jsonPath");
 } else {
     logMessage("❌ Failed to write JSON to $jsonPath");
