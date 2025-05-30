@@ -1,6 +1,6 @@
 <?php
 
-// 🔇 ปิดคำเตือน Deprecated + Notice ทันทีที่สคริปต์เริ่ม
+// 🔇 ปิดคำเตือน Deprecated + Notice
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
 
@@ -93,7 +93,7 @@ $totalFailed = 0;
 $totalItems = 0;
 $totalBundleUpdated = 0;
 $inventoryMap = [];
-$limit = 10;  // ✅ จำกัด 100 SKU แรก
+$limit = 10;
 $countProcessed = 0;
 
 try {
@@ -160,3 +160,15 @@ try {
 // เขียน log ลงไฟล์
 file_put_contents($logFile, implode("\n", $logLines));
 file_put_contents($latestLogFile, implode("\n", $logLines));
+
+// ✅ เขียน JSON
+$jsonData = [
+    'timestamp' => date('c'),
+    'total_items_processed' => $countProcessed,
+    'total_updated' => $totalUpdated,
+    'total_skipped' => $totalSkipped,
+    'total_failed' => $totalFailed,
+    'bundle_updated' => $totalBundleUpdated,
+    'inventory' => $inventoryMap
+];
+file_put_contents(__DIR__ . '/latest.json', json_encode($jsonData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
