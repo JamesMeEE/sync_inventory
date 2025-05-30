@@ -93,7 +93,7 @@ $totalFailed = 0;
 $totalItems = 0;
 $totalBundleUpdated = 0;
 $inventoryMap = [];
-$limit = 10;
+$limit = 10; // ✅ จำกัด 10 SKU แรก
 $countProcessed = 0;
 
 try {
@@ -157,7 +157,7 @@ try {
     logMessage("❌ Script error: " . $e->getMessage());
 }
 
-// เขียน log ลงไฟล์
+// 🔹 เขียน log ลงไฟล์
 file_put_contents($logFile, implode("\n", $logLines));
 file_put_contents($latestLogFile, implode("\n", $logLines));
 
