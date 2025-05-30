@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: stock-sync
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    buildCommand: ""
+    startCommand: ""
