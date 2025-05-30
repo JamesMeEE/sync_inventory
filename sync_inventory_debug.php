@@ -48,7 +48,7 @@ function updateMagentoProductStock($baseUrl, $token, $sku, $qty) {
     return $code;
 }
 
-$limit = 100;
+$limit = 20;
 
 try {
     $bundleMap = file_exists($bundleMappingFile) ? json_decode(file_get_contents($bundleMappingFile), true) : [];
@@ -59,8 +59,8 @@ try {
         if (!isset($response['inventory'])) break;
 
         foreach ($response['inventory'] as $item) {
-            if ($countProcessed >= $limit) break 2; // <-- ออกจากทั้ง do-while
-        
+            if ($countProcessed >= $limit) break 2;
+
             $sku = $item['sku'];
             $qty = $item['on_hand'];
             $code = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $sku, $qty);
@@ -102,5 +102,7 @@ file_put_contents($jsonPath, json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UN
 
 // DONE MESSAGE
 $endTime = microtime(true);
-$elapsed = round(($endTime - $startTime) / 60, 2);
-echo "Done in {$elapsed} minutes\n";
+$elapsedSeconds = $endTime - $startTime;
+$minutes = floor($elapsedSeconds / 60);
+$seconds = round($elapsedSeconds % 60);
+echo "Done in {$minutes} minute(s) {$seconds} second(s)\n";
