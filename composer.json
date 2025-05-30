@@ -1,5 +1,8 @@
 {
     "require": {
-        "google/apiclient": "2.0"
+        "google/apiclient": "2.0",
+        "knplabs/github-api": "^3.0",
+        "php-http/curl-client": "^2.0",
+        "nyholm/psr7": "^1.4"
     }
 }
