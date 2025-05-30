@@ -2,7 +2,7 @@
 
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
-date_default_timezone_set('Asia/Bangkok'); // เร็วและชัดเจน
+date_default_timezone_set('Asia/Bangkok');
 
 require __DIR__ . '/vendor/autoload.php';
 
@@ -36,29 +36,51 @@ function getShipstationInventoryPage($url, $apiKey) {
     return json_decode($response, true);
 }
 
-function updateMagentoProductStock($baseUrl, $token, $sku, $qty) {
-    $url = "$baseUrl/rest/V1/products/$sku/stockItems/1";
-    $data = ['stockItem' => ['qty' => $qty, 'is_in_stock' => $qty > 0]];
-    $headers = [
-        "Authorization: Bearer $token",
-        "Content-Type: application/json"
-    ];
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_CUSTOMREQUEST => "PUT",
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_POSTFIELDS => json_encode($data),
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false
-    ]);
-    curl_exec($ch);
-    curl_close($ch);
+function multiUpdateMagentoStocks($baseUrl, $token, $stockArray) {
+    $multiHandle = curl_multi_init();
+    $curlHandles = [];
+
+    foreach ($stockArray as $sku => $qty) {
+        $url = "$baseUrl/rest/V1/products/$sku/stockItems/1";
+        $data = ['stockItem' => ['qty' => $qty, 'is_in_stock' => $qty > 0]];
+        $headers = [
+            "Authorization: Bearer $token",
+            "Content-Type: application/json"
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST => "PUT",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_POSTFIELDS => json_encode($data),
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false
+        ]);
+        curl_multi_add_handle($multiHandle, $ch);
+        $curlHandles[] = $ch;
+    }
+
+    // Execute all requests in parallel
+    $running = null;
+    do {
+        curl_multi_exec($multiHandle, $running);
+        curl_multi_select($multiHandle);
+    } while ($running > 0);
+
+    // Close all handles
+    foreach ($curlHandles as $ch) {
+        curl_multi_remove_handle($multiHandle, $ch);
+        curl_close($ch);
+    }
+    curl_multi_close($multiHandle);
 }
 
 try {
     $bundleMap = is_file($bundleMappingFile) ? json_decode(file_get_contents($bundleMappingFile), true) : [];
     $url = "https://api.shipstation.com/v2/inventory";
+
+    $stockToUpdate = [];
 
     do {
         $response = getShipstationInventoryPage($url, $shipstationApiKey);
@@ -68,7 +90,7 @@ try {
             if ($countProcessed >= $limit) break 2;
             $sku = $item['sku'];
             $qty = $item['on_hand'];
-            updateMagentoProductStock($magentoBaseUrl, $magentoToken, $sku, $qty);
+            $stockToUpdate[$sku] = $qty;
             $inventoryMap[$sku] = $qty;
             $countProcessed++;
         }
@@ -76,6 +98,11 @@ try {
         $url = $response['links']['next']['href'] ?? null;
     } while ($url && $countProcessed < $limit);
 
+    // Update normal SKUs in parallel
+    multiUpdateMagentoStocks($magentoBaseUrl, $magentoToken, $stockToUpdate);
+
+    // Calculate bundle SKUs
+    $bundleStock = [];
     foreach ($bundleMap as $bundleSku => $data) {
         $minQty = PHP_INT_MAX;
         foreach ($data['components'] as $componentSku => $requiredQty) {
@@ -85,10 +112,13 @@ try {
             }
             $minQty = min($minQty, (int)($inventoryMap[$componentSku] / $requiredQty));
         }
-        $bundleQty = $minQty > 0 ? $minQty : 0;
-        updateMagentoProductStock($magentoBaseUrl, $magentoToken, $bundleSku, $bundleQty);
+        $bundleQty = max(0, $minQty);
+        $bundleStock[$bundleSku] = $bundleQty;
         $inventoryMap[$bundleSku] = $bundleQty;
     }
+
+    // Update bundles in parallel
+    multiUpdateMagentoStocks($magentoBaseUrl, $magentoToken, $bundleStock);
 
     // SAVE JSON
     $publicDir = __DIR__ . '/public';
