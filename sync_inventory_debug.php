@@ -14,7 +14,7 @@ $bundleMappingFile = __DIR__ . '/bundle-mapping.json';
 $startTime = microtime(true);
 $inventoryMap = [];
 $countProcessed = 0;
-$limit = 10;
+$limit = 100;
 
 function getShipstationInventoryPage($url, $apiKey) {
     static $headers;
