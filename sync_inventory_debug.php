@@ -48,7 +48,7 @@ function updateMagentoProductStock($baseUrl, $token, $sku, $qty) {
     return $code;
 }
 
-$limit = 10;
+$limit = 100;
 
 try {
     $bundleMap = file_exists($bundleMappingFile) ? json_decode(file_get_contents($bundleMappingFile), true) : [];
