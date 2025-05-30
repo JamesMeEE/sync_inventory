@@ -72,12 +72,7 @@ function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 
-    $result = @file_put_contents($jsonPath, json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    if ($result === false) {
-        logMessage("❌ Failed to write JSON. Path: $jsonPath");
-    } else {
-        logMessage("✅ JSON written: $result bytes");
-    }
+    $result = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
     if (curl_errno($ch)) {
@@ -161,9 +156,6 @@ try {
     logMessage("❌ Script error: " . $e->getMessage());
 }
 
-logMessage("📂 JSON Path = $jsonPath");
-logMessage("📌 Writable = " . (is_writable(dirname($jsonPath)) ? "YES" : "NO"));
-
 // 🔹 เขียน log ลงไฟล์
 file_put_contents($logFile, implode("\n", $logLines));
 file_put_contents($latestLogFile, implode("\n", $logLines));
@@ -183,6 +175,8 @@ foreach ($inventoryMap as $sku => $qty) {
     ];
 }
 
+logMessage("📂 JSON Path = $jsonPath");
+logMessage("📌 Writable = " . (is_writable(dirname($jsonPath)) ? "YES" : "NO"));
 logMessage("📤 JSON content:\n" . json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
 if (file_put_contents($jsonPath, json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false) {
