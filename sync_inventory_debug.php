@@ -176,6 +176,9 @@ $jsonData = [
     'inventory' => $inventoryMap
 ];
 
+// ✅ แสดงข้อมูล JSON ที่จะบันทึก
+logMessage("📤 JSON content:\n" . json_encode($jsonData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
 if (file_put_contents($jsonPath, json_encode($jsonData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false) {
     logMessage("✅ JSON saved to $jsonPath");
 } else {
