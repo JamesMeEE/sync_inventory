@@ -13,8 +13,6 @@ $bundleMappingFile = __DIR__ . '/bundle-mapping.json';
 
 $startTime = microtime(true);
 $inventoryMap = [];
-$countProcessed = 0;
-$limit = 100;
 
 function getShipstationInventoryPage($url, $apiKey) {
     static $headers;
@@ -42,7 +40,7 @@ function multiUpdateMagentoStocks($baseUrl, $token, $stockArray) {
 
     foreach ($stockArray as $sku => $qty) {
         $url = "$baseUrl/rest/V1/products/$sku/stockItems/1";
-        $data = ['stockItem' => ['qty' => $qty, 'is_in_stock' => $qty > 0]];
+        $data = ['stockItem' => ['qty' => $qty, 'is_in_stock' => is_numeric($qty) && $qty > 0]];
         $headers = [
             "Authorization: Bearer $token",
             "Content-Type: application/json"
@@ -61,14 +59,12 @@ function multiUpdateMagentoStocks($baseUrl, $token, $stockArray) {
         $curlHandles[] = $ch;
     }
 
-    // Execute all requests in parallel
     $running = null;
     do {
         curl_multi_exec($multiHandle, $running);
         curl_multi_select($multiHandle);
     } while ($running > 0);
 
-    // Close all handles
     foreach ($curlHandles as $ch) {
         curl_multi_remove_handle($multiHandle, $ch);
         curl_close($ch);
@@ -79,7 +75,6 @@ function multiUpdateMagentoStocks($baseUrl, $token, $stockArray) {
 try {
     $bundleMap = is_file($bundleMappingFile) ? json_decode(file_get_contents($bundleMappingFile), true) : [];
     $url = "https://api.shipstation.com/v2/inventory";
-
     $stockToUpdate = [];
 
     do {
@@ -87,40 +82,42 @@ try {
         if (!isset($response['inventory'])) break;
 
         foreach ($response['inventory'] as $item) {
-            if ($countProcessed >= $limit) break 2;
-            $sku = $item['sku'];
-            $qty = $item['on_hand'];
-            $stockToUpdate[$sku] = $qty;
+            $sku = $item['sku'] ?? null;
+            $qty = isset($item['on_hand']) && is_numeric($item['on_hand']) ? $item['on_hand'] : "ERROR";
+            if (!$sku) continue;
             $inventoryMap[$sku] = $qty;
-            $countProcessed++;
+            $stockToUpdate[$sku] = $qty;
         }
 
         $url = $response['links']['next']['href'] ?? null;
-    } while ($url && $countProcessed < $limit);
+    } while ($url);
 
-    // Update normal SKUs in parallel
     multiUpdateMagentoStocks($magentoBaseUrl, $magentoToken, $stockToUpdate);
 
-    // Calculate bundle SKUs
     $bundleStock = [];
     foreach ($bundleMap as $bundleSku => $data) {
         $minQty = PHP_INT_MAX;
+        $error = false;
         foreach ($data['components'] as $componentSku => $requiredQty) {
-            if (empty($inventoryMap[$componentSku]) || !is_numeric($inventoryMap[$componentSku])) {
-                $minQty = 0;
+            $compQty = $inventoryMap[$componentSku] ?? null;
+            if (!is_numeric($compQty)) {
+                $error = true;
                 break;
             }
-            $minQty = min($minQty, (int)($inventoryMap[$componentSku] / $requiredQty));
+            $available = floor($compQty / $requiredQty);
+            $minQty = min($minQty, $available);
         }
-        $bundleQty = max(0, $minQty);
-        $bundleStock[$bundleSku] = $bundleQty;
-        $inventoryMap[$bundleSku] = $bundleQty;
+        if ($error) {
+            $inventoryMap[$bundleSku] = "ERROR";
+        } else {
+            $bundleQty = max(0, $minQty);
+            $bundleStock[$bundleSku] = $bundleQty;
+            $inventoryMap[$bundleSku] = $bundleQty;
+        }
     }
 
-    // Update bundles in parallel
     multiUpdateMagentoStocks($magentoBaseUrl, $magentoToken, $bundleStock);
 
-    // SAVE JSON
     $publicDir = __DIR__ . '/public';
     if (!is_dir($publicDir)) mkdir($publicDir, 0755, true);
 
@@ -132,14 +129,12 @@ try {
     }
     file_put_contents($jsonPath, json_encode($jsonArray, JSON_UNESCAPED_UNICODE));
 
-    // UPLOAD TO GITHUB
     require_once __DIR__ . '/upload_to_github.php';
 
 } catch (Exception $e) {
-    // Silent fail
+    // silent
 }
 
-// DONE TIME
 $endTime = microtime(true);
 $elapsed = $endTime - $startTime;
 $minutes = floor($elapsed / 60);
