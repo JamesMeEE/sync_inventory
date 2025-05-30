@@ -92,7 +92,6 @@ $totalSkipped = 0;
 $totalFailed = 0;
 $totalBundleUpdated = 0;
 $inventoryMap = [];
-$limit = 10;
 $countProcessed = 0;
 
 try {
@@ -106,49 +105,56 @@ try {
         }
 
         foreach ($response['inventory'] as $item) {
-            if ($countProcessed >= $limit) break 2;
-
             $sku = $item['sku'];
             $qty = $item['on_hand'];
-            $inventoryMap[$sku] = $qty;
+            $countProcessed++;
 
             $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $sku, $qty);
 
             if ($updateResult['success']) {
                 logMessage("SKU $sku with qty $qty");
+                $inventoryMap[$sku] = $qty;
                 $totalUpdated++;
             } elseif (!empty($updateResult['not_found'])) {
+                logMessage("⚠️ SKU $sku not found in Magento. Skipping.");
+                $inventoryMap[$sku] = "N/A";
                 $totalSkipped++;
             } else {
+                logMessage("❌ SKU $sku failed to update: " . $updateResult['message']);
+                $inventoryMap[$sku] = "N/A";
                 $totalFailed++;
             }
-
-            $countProcessed++;
         }
 
         $url = $response['links']['next']['href'] ?? null;
-    } while ($url && $countProcessed < $limit);
+    } while ($url);
 
     foreach ($bundleMap as $bundleSku => $data) {
         $minQty = PHP_INT_MAX;
         foreach ($data['components'] as $componentSku => $requiredQty) {
-            if (!isset($inventoryMap[$componentSku])) {
+            if (!isset($inventoryMap[$componentSku]) || !is_numeric($inventoryMap[$componentSku])) {
                 $minQty = 0;
                 break;
             }
             $available = floor($inventoryMap[$componentSku] / $requiredQty);
             $minQty = min($minQty, $available);
         }
+
         $bundleQty = max(0, $minQty);
         $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $bundleSku, $bundleQty);
 
         if ($updateResult['success']) {
             logMessage("SKU $bundleSku with qty $bundleQty");
+            $inventoryMap[$bundleSku] = $bundleQty;
             $totalUpdated++;
             $totalBundleUpdated++;
         } elseif (!empty($updateResult['not_found'])) {
+            logMessage("⚠️ Bundle SKU $bundleSku not found in Magento. Skipping.");
+            $inventoryMap[$bundleSku] = "N/A";
             $totalSkipped++;
         } else {
+            logMessage("❌ Bundle SKU $bundleSku failed: " . $updateResult['message']);
+            $inventoryMap[$bundleSku] = "N/A";
             $totalFailed++;
         }
     }
