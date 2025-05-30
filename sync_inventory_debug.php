@@ -5,7 +5,7 @@ ini_set('display_errors', '0');
 
 require __DIR__ . '/vendor/autoload.php';
 
-// CONFIG
+// CONFIGURATION
 $shipstationApiKey = 'xpRrHahO/dZFI6gN3TvtV1tPQbtfNPJochIJUSCejZY';
 $magentoBaseUrl = 'https://fb.frankandbeans.com.au';
 $magentoToken = '7y0evnf0z400fu4ffynzgw2howtanwys';
@@ -16,6 +16,7 @@ $startTime = microtime(true);
 
 // MAIN VARIABLES
 $inventoryMap = [];
+$limit = 10;
 $countProcessed = 0;
 
 function getShipstationInventoryPage($url, $apiKey) {
@@ -30,25 +31,24 @@ function getShipstationInventoryPage($url, $apiKey) {
     return json_decode($response, true);
 }
 
-function updateMagentoProductStock($baseUrl, $token, $sku, $qty) {
-    $url = "$baseUrl/rest/V1/products/$sku/stockItems/1";
+function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
+    $url = "$magentoBaseUrl/rest/V1/products/$sku/stockItems/1";
     $data = ["stockItem" => ["qty" => $qty, "is_in_stock" => $qty > 0]];
     $headers = [
-        "Authorization: Bearer $token",
+        "Authorization: Bearer $accessToken",
         "Content-Type: application/json"
     ];
+
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
     curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return $code;
+    return $httpCode;
 }
-
-$limit = 20;
 
 try {
     $bundleMap = file_exists($bundleMappingFile) ? json_decode(file_get_contents($bundleMappingFile), true) : [];
@@ -67,8 +67,9 @@ try {
             $inventoryMap[$sku] = ($code === 200) ? $qty : "N/A";
             $countProcessed++;
         }
+
         $url = $response['links']['next']['href'] ?? null;
-    } while ($url);
+    } while ($url && $countProcessed < $limit);
 
     foreach ($bundleMap as $bundleSku => $data) {
         $minQty = PHP_INT_MAX;
@@ -100,9 +101,9 @@ foreach ($inventoryMap as $sku => $qty) {
 }
 file_put_contents($jsonPath, json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-// DONE MESSAGE
+// TIME USED
 $endTime = microtime(true);
-$elapsedSeconds = $endTime - $startTime;
-$minutes = floor($elapsedSeconds / 60);
-$seconds = round($elapsedSeconds % 60);
+$elapsed = $endTime - $startTime;
+$minutes = floor($elapsed / 60);
+$seconds = round($elapsed % 60);
 echo "Done in {$minutes} minute(s) {$seconds} second(s)\n";
