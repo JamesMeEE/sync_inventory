@@ -2,8 +2,6 @@
 
 // 🔇 ปิดคำเตือน Deprecated + Notice ทันทีที่สคริปต์เริ่ม
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
-
-// ถ้าต้องการปิดการแสดง error ที่หน้าจอเลย:
 ini_set('display_errors', '0');
 
 require __DIR__ . '/vendor/autoload.php';
@@ -14,26 +12,31 @@ $magentoBaseUrl = 'https://fb.frankandbeans.com.au';
 $magentoToken = '7y0evnf0z400fu4ffynzgw2howtanwys';
 $bundleMappingFile = __DIR__ . '/bundle-mapping.json';
 
-// Helpers
+// LOG CONFIGURATION
+$logDir = __DIR__ . '/logs';
+if (!is_dir($logDir)) mkdir($logDir, 0755, true);
+$logFile = $logDir . '/log_' . date('Ymd_His') . '.txt';
+$latestLogFile = $logDir . '/latest.txt';
+$logLines = [];
+
 function logMessage($message, $echo = true) {
-    global $logFile;
-    file_put_contents($logFile, $message . "\n", FILE_APPEND);
-    if ($echo) echo $message . "\n"; 
+    global $logLines;
+    $timestamp = date('[Y-m-d H:i:s]');
+    $line = "$timestamp $message";
+    $logLines[] = $line;
+    if ($echo) echo $line . "\n";
 }
 
-
-function cleanOldLogs($logDir, $maxFiles = 24) {
+function cleanOldLogs($logDir, $maxFiles = 100) {
     $files = glob("$logDir/log_*.txt");
     if (count($files) > $maxFiles) {
         usort($files, function($a, $b) {
             return filectime($a) - filectime($b);
         });
-        $filesToDelete = array_slice($files, 0, count($files) - $maxFiles);
-        foreach ($filesToDelete as $file) {
-            @unlink($file);
-        }
+        @unlink($files[0]);
     }
 }
+cleanOldLogs($logDir, 100);
 
 function getShipstationInventoryPage($url, $apiKey) {
     $ch = curl_init($url);
@@ -83,18 +86,12 @@ function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
     else return ['success' => false, 'message' => "HTTP $httpCode. Response: $result"];
 }
 
-// SCRIPT START
-$logDir = __DIR__ . '/logs';
-if (!is_dir($logDir)) mkdir($logDir, 0755, true);
-$logFile = $logDir . '/log_' . date('Ymd_His') . '.txt';
-cleanOldLogs($logDir, 24);
-
+// === SCRIPT START ===
 $totalUpdated = 0;
 $totalSkipped = 0;
 $totalFailed = 0;
 $totalItems = 0;
 $totalBundleUpdated = 0;
-
 $inventoryMap = [];
 
 try {
@@ -116,7 +113,7 @@ try {
             $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $sku, $qty);
 
             if ($updateResult['success']) {
-                logMessage("SKU $sku with qty $qty", true, true);
+                logMessage("SKU $sku with qty $qty");
                 $totalUpdated++;
             } elseif (!empty($updateResult['not_found'])) {
                 $totalSkipped++;
@@ -124,12 +121,9 @@ try {
                 $totalFailed++;
             }
         }
-
         $url = $response['links']['next']['href'] ?? null;
-
     } while ($url);
 
-    // Handle bundle SKUs
     foreach ($bundleMap as $bundleSku => $data) {
         $minQty = PHP_INT_MAX;
         foreach ($data['components'] as $componentSku => $requiredQty) {
@@ -140,12 +134,11 @@ try {
             $available = floor($inventoryMap[$componentSku] / $requiredQty);
             $minQty = min($minQty, $available);
         }
-
         $bundleQty = max(0, $minQty);
         $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $bundleSku, $bundleQty);
 
         if ($updateResult['success']) {
-            logMessage("SKU $bundleSku with qty $bundleQty", true, true);
+            logMessage("SKU $bundleSku with qty $bundleQty");
             $totalUpdated++;
             $totalBundleUpdated++;
         } elseif (!empty($updateResult['not_found'])) {
@@ -154,8 +147,10 @@ try {
             $totalFailed++;
         }
     }
-
 } catch (Exception $e) {
-    // ไม่แสดง error เพื่อให้ Google Script อ่านง่าย
-    file_put_contents($logFile, "❌ Script error: " . $e->getMessage() . "\n", FILE_APPEND);
+    logMessage("❌ Script error: " . $e->getMessage());
 }
+
+// เขียน log ลงไฟล์
+file_put_contents($logFile, implode("\n", $logLines));
+file_put_contents($latestLogFile, implode("\n", $logLines));
