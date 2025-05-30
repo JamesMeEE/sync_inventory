@@ -9,10 +9,9 @@ $magentoToken = '7y0evnf0z400fu4ffynzgw2howtanwys';
 $bundleMappingFile = __DIR__ . '/bundle-mapping.json';
 
 // Helpers
-function logMessage($message, $echo = true) {
+function logMessage($message, $echo = true, $clean = false) {
     global $logFile;
-    $timestamp = date('Y-m-d H:i:s');
-    $line = "[$timestamp] $message\n";
+    $line = $clean ? "$message\n" : "[" . date('Y-m-d H:i:s') . "] $message\n";
     file_put_contents($logFile, $line, FILE_APPEND);
     if ($echo) {
         echo $line;
@@ -54,14 +53,7 @@ function getShipstationInventoryPage($url, $apiKey) {
 
 function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
     $url = "$magentoBaseUrl/rest/V1/products/$sku/stockItems/1";
-
-    $data = [
-        "stockItem" => [
-            "qty" => $qty,
-            "is_in_stock" => $qty > 0
-        ]
-    ];
-
+    $data = ["stockItem" => ["qty" => $qty, "is_in_stock" => $qty > 0]];
     $headers = [
         "Authorization: Bearer $accessToken",
         "Content-Type: application/json"
@@ -82,20 +74,14 @@ function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
     }
     curl_close($ch);
 
-    if ($httpCode === 200) {
-        return ['success' => true];
-    } elseif ($httpCode === 404) {
-        return ['success' => false, 'not_found' => true];
-    } else {
-        return ['success' => false, 'message' => "HTTP $httpCode. Response: $result"];
-    }
+    if ($httpCode === 200) return ['success' => true];
+    elseif ($httpCode === 404) return ['success' => false, 'not_found' => true];
+    else return ['success' => false, 'message' => "HTTP $httpCode. Response: $result"];
 }
 
 // SCRIPT START
 $logDir = __DIR__ . '/logs';
-if (!is_dir($logDir)) {
-    mkdir($logDir, 0755, true);
-}
+if (!is_dir($logDir)) mkdir($logDir, 0755, true);
 $logFile = $logDir . '/log_' . date('Ymd_His') . '.txt';
 cleanOldLogs($logDir, 24);
 
@@ -121,19 +107,16 @@ try {
         foreach ($response['inventory'] as $item) {
             $sku = $item['sku'];
             $qty = $item['on_hand'];
-
             $inventoryMap[$sku] = $qty;
 
             $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $sku, $qty);
 
             if ($updateResult['success']) {
-                logMessage("✅ Updated SKU $sku with qty $qty");
+                logMessage("SKU $sku with qty $qty", true, true);
                 $totalUpdated++;
             } elseif (!empty($updateResult['not_found'])) {
-                logMessage("⚠️ SKU $sku not found in Magento. Skipping.");
                 $totalSkipped++;
             } else {
-                logMessage("❌ Failed to update SKU $sku: " . ($updateResult['message'] ?? 'Unknown error'));
                 $totalFailed++;
             }
         }
@@ -158,27 +141,17 @@ try {
         $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $bundleSku, $bundleQty);
 
         if ($updateResult['success']) {
-            logMessage("🔁 Updated bundle SKU $bundleSku with qty $bundleQty");
+            logMessage("SKU $bundleSku with qty $bundleQty", true, true);
             $totalUpdated++;
             $totalBundleUpdated++;
         } elseif (!empty($updateResult['not_found'])) {
-            logMessage("⚠️ Bundle SKU $bundleSku not found in Magento. Skipping.");
             $totalSkipped++;
         } else {
-            logMessage("❌ Failed to update bundle SKU $bundleSku: " . ($updateResult['message'] ?? 'Unknown error'));
             $totalFailed++;
         }
     }
 
-    $summary = "=== Update Summary ===\n"
-        . "Total SKUs processed: $totalItems\n"
-        . "Successfully updated: $totalUpdated\n"
-        . " - Bundle SKUs updated: $totalBundleUpdated\n"
-        . "SKUs skipped (not found): $totalSkipped\n"
-        . "Failed updates: $totalFailed\n";
-
-    logMessage($summary);
-
 } catch (Exception $e) {
-    logMessage("❌ Script error: " . $e->getMessage());
+    // ไม่แสดง error เพื่อให้ Google Script อ่านง่าย
+    file_put_contents($logFile, "❌ Script error: " . $e->getMessage() . "\n", FILE_APPEND);
 }
