@@ -1,156 +1,117 @@
 <?php
 
-// 🔇 ปิดคำเตือน Deprecated + Notice ทันทีที่สคริปต์เริ่ม
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
+date_default_timezone_set('Asia/Bangkok'); // เร็วและชัดเจน
 
 require __DIR__ . '/vendor/autoload.php';
 
-// CONFIGURATION
 $shipstationApiKey = 'xpRrHahO/dZFI6gN3TvtV1tPQbtfNPJochIJUSCejZY';
 $magentoBaseUrl = 'https://fb.frankandbeans.com.au';
 $magentoToken = '7y0evnf0z400fu4ffynzgw2howtanwys';
 $bundleMappingFile = __DIR__ . '/bundle-mapping.json';
 
-// LOG CONFIGURATION
-$logDir = __DIR__ . '/logs';
-if (!is_dir($logDir)) mkdir($logDir, 0755, true);
-$logFile = $logDir . '/log_' . date('Ymd_His') . '.txt';
-$latestLogFile = $logDir . '/latest.txt';
-$logLines = [];
-
-function logMessage($message, $echo = true) {
-    global $logLines;
-    $timestamp = date('[Y-m-d H:i:s]');
-    $line = "$timestamp $message";
-    $logLines[] = $line;
-    if ($echo) echo $line . "\n";
-}
-
-function cleanOldLogs($logDir, $maxFiles = 100) {
-    $files = glob("$logDir/log_*.txt");
-    if (count($files) > $maxFiles) {
-        usort($files, function($a, $b) {
-            return filectime($a) - filectime($b);
-        });
-        @unlink($files[0]);
-    }
-}
-cleanOldLogs($logDir, 100);
+$startTime = microtime(true);
+$inventoryMap = [];
+$countProcessed = 0;
+$limit = 10;
 
 function getShipstationInventoryPage($url, $apiKey) {
+    static $headers;
+    if (!$headers) {
+        $headers = [
+            "api-key: $apiKey",
+            "Content-Type: application/json"
+        ];
+    }
     $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        "api-key: $apiKey",
-        "Content-Type: application/json"
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false
     ]);
     $response = curl_exec($ch);
-    if (curl_errno($ch)) {
-        curl_close($ch);
-        throw new Exception('ShipStation cURL error: ' . curl_error($ch));
-    }
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    if ($httpCode !== 200) {
-        throw new Exception("ShipStation API responded with HTTP code $httpCode");
-    }
     return json_decode($response, true);
 }
 
-function updateMagentoProductStock($magentoBaseUrl, $accessToken, $sku, $qty) {
-    $url = "$magentoBaseUrl/rest/V1/products/$sku/stockItems/1";
-    $data = ["stockItem" => ["qty" => $qty, "is_in_stock" => $qty > 0]];
+function updateMagentoProductStock($baseUrl, $token, $sku, $qty) {
+    $url = "$baseUrl/rest/V1/products/$sku/stockItems/1";
+    $data = ['stockItem' => ['qty' => $qty, 'is_in_stock' => $qty > 0]];
     $headers = [
-        "Authorization: Bearer $accessToken",
+        "Authorization: Bearer $token",
         "Content-Type: application/json"
     ];
-
     $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-
-    $result = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    if (curl_errno($ch)) {
-        curl_close($ch);
-        return ['success' => false, 'message' => 'cURL error: ' . curl_error($ch)];
-    }
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST => "PUT",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_POSTFIELDS => json_encode($data),
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false
+    ]);
+    curl_exec($ch);
     curl_close($ch);
-
-    if ($httpCode === 200) return ['success' => true];
-    elseif ($httpCode === 404) return ['success' => false, 'not_found' => true];
-    else return ['success' => false, 'message' => "HTTP $httpCode. Response: $result"];
 }
 
-// === SCRIPT START ===
-$totalUpdated = 0;
-$totalSkipped = 0;
-$totalFailed = 0;
-$totalItems = 0;
-$totalBundleUpdated = 0;
-$inventoryMap = [];
-
 try {
-    $bundleMap = file_exists($bundleMappingFile) ? json_decode(file_get_contents($bundleMappingFile), true) : [];
-
+    $bundleMap = is_file($bundleMappingFile) ? json_decode(file_get_contents($bundleMappingFile), true) : [];
     $url = "https://api.shipstation.com/v2/inventory";
+
     do {
         $response = getShipstationInventoryPage($url, $shipstationApiKey);
-        if (!isset($response['inventory'])) {
-            throw new Exception('Malformed ShipStation response: missing inventory field.');
-        }
-        $totalItems += count($response['inventory']);
+        if (!isset($response['inventory'])) break;
 
         foreach ($response['inventory'] as $item) {
+            if ($countProcessed >= $limit) break 2;
             $sku = $item['sku'];
             $qty = $item['on_hand'];
+            updateMagentoProductStock($magentoBaseUrl, $magentoToken, $sku, $qty);
             $inventoryMap[$sku] = $qty;
-
-            $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $sku, $qty);
-
-            if ($updateResult['success']) {
-                logMessage("SKU $sku with qty $qty");
-                $totalUpdated++;
-            } elseif (!empty($updateResult['not_found'])) {
-                $totalSkipped++;
-            } else {
-                $totalFailed++;
-            }
+            $countProcessed++;
         }
+
         $url = $response['links']['next']['href'] ?? null;
-    } while ($url);
+    } while ($url && $countProcessed < $limit);
 
     foreach ($bundleMap as $bundleSku => $data) {
         $minQty = PHP_INT_MAX;
         foreach ($data['components'] as $componentSku => $requiredQty) {
-            if (!isset($inventoryMap[$componentSku])) {
+            if (empty($inventoryMap[$componentSku]) || !is_numeric($inventoryMap[$componentSku])) {
                 $minQty = 0;
                 break;
             }
-            $available = floor($inventoryMap[$componentSku] / $requiredQty);
-            $minQty = min($minQty, $available);
+            $minQty = min($minQty, (int)($inventoryMap[$componentSku] / $requiredQty));
         }
-        $bundleQty = max(0, $minQty);
-        $updateResult = updateMagentoProductStock($magentoBaseUrl, $magentoToken, $bundleSku, $bundleQty);
-
-        if ($updateResult['success']) {
-            logMessage("SKU $bundleSku with qty $bundleQty");
-            $totalUpdated++;
-            $totalBundleUpdated++;
-        } elseif (!empty($updateResult['not_found'])) {
-            $totalSkipped++;
-        } else {
-            $totalFailed++;
-        }
+        $bundleQty = $minQty > 0 ? $minQty : 0;
+        updateMagentoProductStock($magentoBaseUrl, $magentoToken, $bundleSku, $bundleQty);
+        $inventoryMap[$bundleSku] = $bundleQty;
     }
+
+    // SAVE JSON
+    $publicDir = __DIR__ . '/public';
+    if (!is_dir($publicDir)) mkdir($publicDir, 0755, true);
+
+    $jsonPath = $publicDir . '/latest.json';
+    $jsonArray = [['generated_at' => date('Y-m-d H:i:s')]];
+    $i = 1;
+    foreach ($inventoryMap as $sku => $qty) {
+        $jsonArray[] = ['no' => $i++, 'sku' => $sku, 'qty' => $qty];
+    }
+    file_put_contents($jsonPath, json_encode($jsonArray, JSON_UNESCAPED_UNICODE));
+
+    // UPLOAD TO GITHUB
+    require_once __DIR__ . '/upload_to_github.php';
+
 } catch (Exception $e) {
-    logMessage("❌ Script error: " . $e->getMessage());
+    // Silent fail
 }
 
-// เขียน log ลงไฟล์
-file_put_contents($logFile, implode("\n", $logLines));
-file_put_contents($latestLogFile, implode("\n", $logLines));
+// DONE TIME
+$endTime = microtime(true);
+$elapsed = $endTime - $startTime;
+$minutes = floor($elapsed / 60);
+$seconds = round($elapsed % 60);
+echo "Done in {$minutes} minute(s) {$seconds} second(s)\n";
