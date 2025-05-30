@@ -1,7 +1,10 @@
 <?php
 
+// 🔇 ปิดคำเตือน Deprecated + Notice ทันทีที่สคริปต์เริ่ม
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
-error_reporting(E_ERROR | E_PARSE);
+
+// ถ้าต้องการปิดการแสดง error ที่หน้าจอเลย:
+ini_set('display_errors', '0');
 
 require __DIR__ . '/vendor/autoload.php';
 
