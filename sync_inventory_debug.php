@@ -175,14 +175,13 @@ foreach ($inventoryMap as $sku => $qty) {
     ];
 }
 
-require_once __DIR__ . '/upload_to_github.php';
-
 logMessage("📂 JSON Path = $jsonPath");
 logMessage("📌 Writable = " . (is_writable(dirname($jsonPath)) ? "YES" : "NO"));
 logMessage("📤 JSON content:\n" . json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
 if (file_put_contents($jsonPath, json_encode($jsonArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) !== false) {
     logMessage("✅ JSON saved to $jsonPath");
+    require_once __DIR__ . '/upload_to_github.php';
 } else {
     logMessage("❌ Failed to write JSON to $jsonPath");
 }
