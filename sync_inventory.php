@@ -11,14 +11,12 @@ $magentoToken = '7y0evnf0z400fu4ffynzgw2howtanwys';
 $bundleMappingFile = __DIR__ . '/bundle-mapping.json';
 
 // Helpers
-function logMessage($message, $echo = true, $clean = false) {
+function logMessage($message, $echo = true) {
     global $logFile;
-    $line = $clean ? "$message\n" : "[" . date('Y-m-d H:i:s') . "] $message\n";
-    file_put_contents($logFile, $line, FILE_APPEND);
-    if ($echo) {
-        echo $line;
-    }
+    file_put_contents($logFile, $message . "\n", FILE_APPEND);
+    if ($echo) echo $message . "\n"; 
 }
+
 
 function cleanOldLogs($logDir, $maxFiles = 24) {
     $files = glob("$logDir/log_*.txt");
