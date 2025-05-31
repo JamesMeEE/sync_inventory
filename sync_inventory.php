@@ -1,10 +1,5 @@
 <?php
 
-if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
-    $_SERVER['REQUEST_METHOD'] = 'GET';
-}
-
-
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 ini_set('display_errors', '0');
 date_default_timezone_set('Asia/Bangkok');
