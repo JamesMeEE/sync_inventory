@@ -1,6 +1,6 @@
 <?php
 // === CONFIG ===
-$repo = 'JamesMeEE/sync_inventory'; // GitHub repo
+$repo = 'JamesMeEEE/sync_inventory'; // GitHub repo
 $branch = 'main'; // หรือ master ตามที่คุณใช้จริง
 $token = getenv('GITHUB_TOKEN'); // ต้องตั้งค่า ENV ใน Render ชื่อ GITHUB_TOKEN
 $localFile = __DIR__ . '/public/latest.json';
